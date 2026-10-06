@@ -72,6 +72,7 @@ button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);
       <dt>Всередині</dt><dd>4736 × 2536 мм</dd>
       <dt>Висота в приміщенні</dt><dd>3000 / 2500 мм</dd>
       <dt>Дах</dt><dd>односхилий, ≈10°</dd>
+      <dt>Покрівля</dt><dd>бітумна черепиця по OSB 18</dd>
       <dt>Фундамент</dt><dd>стрічка 200 × 500</dd>
       <dt>Цоколь над землею</dt><dd>200 мм</dd>
       <dt>Двері</dt><dd>алюм. скло 900 × 2200</dd>
@@ -123,7 +124,7 @@ const camera=new THREE.PerspectiveCamera(38,1,0.1,200);
 const controls=new THREE.OrbitControls(camera,renderer.domElement);
 controls.enableDamping=true; controls.dampingFactor=.08;
 controls.maxPolarAngle=Math.PI/2-0.02; controls.minDistance=2.5; controls.maxDistance=28;
-camera.position.set(7.4,4.4,9.2); controls.target.set(0,1.5,0);
+camera.position.set(7.4,6.4,9.2); controls.target.set(0,1.5,0);
 
 /* ---------- helpers ---------- */
 function canvasTex(w,h,draw,rx,ry){
@@ -172,9 +173,17 @@ const larchTex=canvasTex(128,128,(g,w,h)=>{
     g.fillStyle='#2e2016'; g.fillRect(i*sw,0,3,h);
   }
 });
-const roofTex=canvasTex(128,32,(g,w,h)=>{
-  g.fillStyle='#3a3f43'; g.fillRect(0,0,w,h);
-  g.fillStyle='#5a6065'; g.fillRect(0,0,4,h); g.fillStyle='#22262a'; g.fillRect(4,0,3,h);
+const roofTex=canvasTex(256,256,(g,w,h)=>{
+  const pal=['#3d4043','#44484b','#37393c','#4a4d50','#3a3d40'];
+  g.fillStyle='#26282a'; g.fillRect(0,0,w,h);
+  const rows=8, rh=h/rows, tw=w/6;
+  for(let r=0;r<rows;r++){
+    for(let c=-1;c<7;c++){
+      const x=c*tw+(r%2?tw/2:0), y=r*rh;
+      g.fillStyle=pal[Math.floor(Math.random()*pal.length)]; g.fillRect(x+1,y+1,tw-2,rh-1);
+      g.fillStyle='rgba(0,0,0,.28)'; g.fillRect(x+1,y+rh-4,tw-2,3);
+    }
+  }
 });
 
 /* ---------- materials ---------- */
@@ -193,8 +202,8 @@ const concrete=std(0x9b9a95,{roughness:.95});
 const gravel=std(0xb3a88f,{roughness:1});
 const ashMat=(()=>{const t=ashTex.clone();t.needsUpdate=true;t.repeat.set(IHX*2,.62);return std(0xffffff,{map:t,roughness:.55})})();
 const groundMat=std(0xb7c1ae,{roughness:1}); groundMat.transparent=true;
-const roofMat=std(0xffffff,{roughness:.55,metalness:.35});
-roofMat.map=roofTex.clone(); roofMat.map.needsUpdate=true; roofMat.map.repeat.set(11.2,1);
+const roofMat=std(0xffffff,{roughness:.95,metalness:0});
+roofMat.map=roofTex.clone(); roofMat.map.needsUpdate=true; roofMat.map.repeat.set(5.6/.5,3.44/.5);
 const frameMat=std(0xd8b27d,{roughness:.8});
 
 /* ---------- ground & context ---------- */
@@ -306,8 +315,15 @@ function sideLayer(x0,x1,mat,isCore){
 /* ---------- roof ---------- */
 const roofG=new THREE.Group(); roofG.position.set(0,(HF+HB)/2,0); roofG.rotation.x=-ALPHA; scene.add(roofG);
 const RL=Math.sqrt(D*D+(HF-HB)*(HF-HB))+0.6, RW=L+0.6;
-const roofSlab=new THREE.Mesh(new THREE.BoxGeometry(RW,.17,RL),roofMat);
-roofSlab.position.y=.085; roofSlab.castShadow=roofSlab.receiveShadow=true; roofG.add(roofSlab);
+const roofSlab=new THREE.Mesh(new THREE.BoxGeometry(RW,.01,RL),roofMat);       // bituminous shingles
+roofSlab.position.y=.173; roofSlab.castShadow=roofSlab.receiveShadow=true; roofG.add(roofSlab);
+const osbMat=std(0xcaa46a,{roughness:.9}); osbMat.transparent=true; osbMat.opacity=.55;
+const osbDeck=new THREE.Mesh(new THREE.BoxGeometry(RW,.018,RL),osbMat);        // OSB-3 deck 18 mm
+osbDeck.position.y=.159; osbDeck.visible=false; roofG.add(osbDeck);
+const fasciaMat=std(0x2f3336,{roughness:.6});
+[[RW,.18,.03,0,.09,RL/2-.015],[RW,.18,.03,0,.09,-RL/2+.015],[.03,.18,RL,RW/2-.015,.09,0],[.03,.18,RL,-RW/2+.015,.09,0]].forEach(([w,h,d,x,y,z])=>{
+  const f=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),fasciaMat); f.position.set(x,y,z); f.castShadow=true; roofG.add(f);
+});
 const raftersG=new THREE.Group(); roofG.add(raftersG);
 (function(){
   const n=10;
@@ -518,7 +534,7 @@ function update(){
   wallMeshes.forEach(m=>m.castShadow=!ghost);
   coreMeshes.forEach(m=>m.visible=!S.frame);
   frameG.visible=S.frame; frontFrameG.visible=S.frame; raftersG.visible=S.frame;
-  roofSlab.visible=S.roof; roofMat.transparent=S.frame; roofMat.opacity=S.frame?.2:1; roofMat.depthWrite=!S.frame; roofMat.needsUpdate=true;
+  roofSlab.visible=S.roof; osbDeck.visible=S.frame&&S.roof; roofMat.transparent=S.frame; roofMat.opacity=S.frame?.2:1; roofMat.depthWrite=!S.frame; roofMat.needsUpdate=true;
   roofSlab.castShadow=!S.frame&&S.roof;
   frontG.visible=S.front;
   groundMat.opacity=S.found?.14:1; groundMat.depthWrite=!S.found; groundMat.needsUpdate=true;
@@ -532,7 +548,7 @@ togDefs.forEach(([k,t])=>{
   b.addEventListener('click',()=>{S[k]=!S[k]; update();}); tEl.appendChild(b);
 });
 const views={
-  iso:{n:'3/4',pos:[7.4,4.4,9.2],tgt:[0,1.5,0]},
+  iso:{n:'3/4',pos:[7.4,6.4,9.2],tgt:[0,1.5,0]},
   front:{n:'Фасад',pos:[0,2.0,11.5],tgt:[0,1.6,0]},
   back:{n:'Ззаду',pos:[0,3.0,-11.5],tgt:[0,1.5,0]},
   top:{n:'План',pos:[0,14,.01],tgt:[0,0,0],set:{roof:false}},
